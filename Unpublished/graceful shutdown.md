@@ -429,6 +429,10 @@ Be reliable. Stay cool.
 
 #memory #cppcore #OS 
 
+
+
+
+
 Что можно делать внутри signal handler'а?
 #опытным
 
