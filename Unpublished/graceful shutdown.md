@@ -756,6 +756,6 @@ Be just better. Stay cool.
 Если мы можем записать в сокет, то кто-то может слушать этот сокет. И слушатель уже ничем не ограничен в плане используемого функционала. Если слушатель увидит приход события на сокет, то он может делать в принципе все, что угодно, и вызывать любые коллбэки. Нам это и нужно. 
 
 
-
+https://youtube.com/@misha_filitov?si=G3HmZCnoJcYzDSSR
 
 Отличия signal и sigaction https://stackoverflow.com/questions/231912/what-is-the-difference-between-sigaction-and-signal
