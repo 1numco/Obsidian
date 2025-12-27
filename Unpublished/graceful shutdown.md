@@ -4,7 +4,7 @@ Graceful shutdown
 
 Любое приложение рано или поздно завершает свою работу. Кто-то обязательно нажмет ctrl+c или убьет процесс.
 
-И также, как человек готовится к своей смерти, если знает, что она близко(завершает незаконченные дела, споры или обиды), приложение тоже должно приготовиться с своей смерти.
+И также, как человек готовится к своей смерти, если знает, что она близко(завершает незаконченные дела, споры или обиды, готовит завещание), приложение тоже должно приготовиться с своей смерти.
 
 Зачем? Почему бы просто не прекратить работу? В некоторых случаях это сделать можно, но скорее всего это не очень большие и сложные приложения.
 
@@ -18,7 +18,7 @@ Graceful shutdown
 
 Однако это понятие можно распространить не только на завершение приложений. Но и на завершение цикла жизни отдельных объектов. Например, у вас есть какой-то записывающий стрим в базу. Бывает такое, что не прям обязательно, чтобы эти данные были доступны из базы здесь и сейчас. Поэтому стрим может копить записи какое-то время и по порогу флашить буфер в базу. Так вот частью graceful завершением работы такого класса должен быть сброс буфера в базу, чтобы все накопившиеся данные все-таки в ней оказались, а не потерялись.
 
-Это был такой балабольский первый пост из небольшой серии для тех, кто не знаком с понятием. Дальше мы будем разбирать детали и тонкости плавного завершения.
+Это был такой балабольский первый пост из большой серии для тех, кто не знаком с понятием. Дальше мы будем разбирать детали и тонкости плавного завершения.
 
 Complete your tasks. Stay cool.
 
@@ -28,11 +28,11 @@ Complete your tasks. Stay cool.
 Graceful shutdown
 #новичкам 
 
-Как я говорил в предыдущем посте - у нормального приложения есть определенные контракты с клиентом. Как минимум, клиент ожидает либо выполнения своего запроса, либо индикации, что его невозможно выполнить. Не хочется иметь каких-то промежуточных результатов или состояний. Да и серверу тоже не нужно, чтобы клиент прислал какой-то кривой запрос, потому что он неожиданно грохнулся.
+Как мы и говорили в предыдущем посте - у нормального приложения есть определенные контракты с клиентом. Как минимум, клиент ожидает либо выполнения своего запроса, либо индикации, что его невозможно выполнить. Не хочется иметь каких-то промежуточных результатов или состояний. Да и серверу тоже не нужно, чтобы клиент прислал какой-то кривой запрос, потому что он неожиданно грохнулся.
 
 Короче, всем хочется добра, позитива и мягкого завершения.
 
-Часто программы крутятся в так называемом цикле событий. Программа бесконечно проверяется доступность каких-то данных и если они есть - обрабатывает их. Самый простой event_loop - обычный бесконечный цикл. Работаем от обеда и до само смерти программы.
+Часто программы крутятся в так называемом цикле событий. Программа бесконечно проверяется доступность каких-то данных и если они есть - обрабатывает их. Самый простой event_loop - обычный бесконечный цикл. Работаем от обеда и до самой смерти программы.
 
 Давайте пример:
 
@@ -48,7 +48,9 @@ void Worker() {
 
 Тут программа мониторит стандартный ввод и обрабатывает все "команды", которая она получит оттуда.
 
-Что может пойти не так? Ну например мы убьем приложение где-то посередине функции process_line. И команда не отработает, как надо. Какой выход?
+Что может пойти не так? Ну например мы убьем приложение где-то посередине функции process_line. И команда не отработает, как надо. 
+
+Какой выход?
 
 Не крутиться бесконечно в цикле. Ничего реально бесконечного в нашей жизни нет и глупо предполагать, что когда-то будет. Да и вообще. Я сам художник своей судьбы! Хочу иметь возможность останавливать этот цикл.
 
@@ -109,7 +111,9 @@ private:
 
 Пока нам нужен объект LineProcessor, он работает. Как только он нам перестал быть нужным aka мы вызвали его деструктор, то мы останавливаем цикл, ждем завершения обработки последней переданной команды и только после этого считаем, что объект LineProcessor уничтожен. 
 
-Ну и да, важное уточнение. Так как мы уже в многопотоке, то нам надо позаботиться о синхронизации доступа к переменной is_working, так как мы ее читаем и изменяем в разных потоках. Можно было бы добавить привычный мьютекс, но в данном кейсе это слишком. Есть замечательный шаблонный класс std::atomic, который оборачивает объекты разных классов и делает доступ к ним "атомарным", то есть потокобезопасным. Для булевого типа не будет никаких системных вызовов, которые есть при блокировке мьютекса. Да и зачем вводить новую сущность, когда этого можно не делать. Поэтому просто изменяем bool на std::atomic\<bool> и радуемся жизни.
+Ну и да, важное уточнение. Так как мы уже в многопотоке, то нам надо позаботиться о синхронизации доступа к переменной is_working, так как мы ее читаем и изменяем в разных потоках. 
+
+Можно было бы добавить привычный мьютекс, но в данном кейсе это слишком дорого. Есть замечательный шаблонный класс std::atomic, который оборачивает объекты разных классов и делает доступ к ним "атомарным", то есть потокобезопасным.
 
 В целом, идея тут в том, чтобы показать один из механизмов управления состоянием воркера, когда программа точно знает, когда его завершить.
 
@@ -187,7 +191,7 @@ extern "C" void fun(int sig);|
 
 Это требования стандарта, но более менее все компиляторы обычно позволяют использовать в качестве хэндлеров плюсовые функции и даже статические методы классов.
 
-Такая сигнатура ОЧЕНЬ сильно ограничивает применимость std::signal. Сами посудите, мы не можем передавать в функцию никакие кастомные данные. Поэтому мы либо там просто пишем в лог "Я помер", либо нас просто вынуждают использовать глобальные переменные. Ну и собственно, первый же пример на цпп референс об этом и говорит.
+Такая сигнатура ОЧЕНЬ сильно ограничивает применимость std::signal. Сами посудите, мы не можем передавать в функцию никакие кастомные данные. Нас просто вынуждают использовать глобальные переменные. Ну и собственно, первый же пример на цпп референс об этом и говорит.
 
 ```cpp
 namespace
@@ -237,7 +241,7 @@ Don't be limited. Stay cool.
 
 Судя по названию стандартных сигналов, как бы подразумевается, что операционная система сама без нашего участия отправляет их процессу. У программы все-таки есть свои средства сообщения внешнему миру о наступлении неожиданного события - исключения.
 
-Но как-то несправедливо получается. Раз программа может принимать и обрабатывать сигналы, то должны уметь и отправлять их. А то что, программа - раб?! Даешь права программе отправлять сигналы!
+Но как-то несправедливо получается. Раз программа может принимать и обрабатывать сигналы, то должна уметь и отправлять их. А то что, программа - раб?! Даешь права программе отправлять сигналы!
 
 Оказывается мы можем стандартными средствами возбудить сигнал. Для этого существует функция std::raise().
 
@@ -298,9 +302,9 @@ Give up harmful rights. Stay cool.
 Пояснение про сигналы
 #опытным 
 
-Как я уже говорил, в плюсовом стандарте очень мало написано про сигналы, что это такое, как они работают и обрабатываются на низком уровне. Поэтому в рамках С++ писать нормальную обработку сигналов вообще практически не представляется возможным.
+Как я уже говорил, в плюсовом стандарте очень мало написано про сигналы, что это такое, как они работают и обрабатываются на низком уровне. Поэтому в рамках С++ писать нормальную обработку сигналов очень сложно.
 
-Но мы можем заглянуть в posix стандарт и узнать немного больше о сигналах. Сегодня я дам небольшое пояснение, которое вам поможет чуть лучше понимать тему.
+Но мы можем заглянуть в posix стандарт и узнать немного больше о сигналах. Сегодня я дам небольшое пояснение, которое возможно вам поможет чуть лучше понимать тему.
 
 Есть два вида сигналов в posix - стандартные и real-time'овые. Будем говорить только про стандартные, так как они хоть как-то пересекаются с плюсовым стандартом.
 
@@ -317,9 +321,9 @@ process_1 -> OS kernel -> process_2
 Важно: один сигнал в рамках одного процесса может иметь только один уникальный обработчик. Вы не можете установить 2 обработчика. При попытке установить второй хэндлер, вы просто перезапишите старый.
 Но несколько сигналов могут иметь одинаковые обработчики, никто этого не запрещает. Частое явление, когда на SIGTERM и SIGINT устанавливают одинаковые обработчики. А дефолтное поведение для 80% сигналов одинаковое - немедленное завершение программы.
 
-Обработчик сигнала - аттрибут непосредственно процесса. В многопоточной программе, даже если вы создадите огромную такую кучу тредов, все равно обработчик сигналов один на все потоки. В каком бы потоке вы не зарегистрировали обработчик - он зарегистрируется для всего процесса. Поток тут просто выступает исполнителем кода регистратора этого обработчика, ничего более.
+Обработчик сигнала - атрибут непосредственно процесса. В многопоточной программе, даже если вы создадите огромную такую кучу тредов, все равно обработчик сигналов один на все потоки. В каком бы потоке вы не зарегистрировали обработчик - он зарегистрируется для всего процесса. Поток тут просто выступает исполнителем кода регистратора этого обработчика, ничего более.
 
-Как мы рассматривали ранее, std::raise посылает сигнал в тот же поток программы, из которого он вызван. Тогда это была довольно непонятная фраза, . Давайте добавим немного контекста.
+Как мы рассматривали ранее, std::raise посылает сигнал в тот же поток программы, из которого он вызван. Тогда это была вскользь брошенная фраза, сейчас разберемся с тем, как это работает.
 
 Стандартный способ послать сигнал в posix - системный вызов kill:
 ```c
@@ -330,13 +334,13 @@ int kill(pid_t pid, int sig);
 
 Но kill ничего не говорит о том, где этот сигнал будет обрабатываться. А будет он обрабатываться в каком-то потоке программы. Логично.
 
-Так вот каждый поток процесса имеет свою маску сигнала. Это, грубо говоря, индикатор. Будет ли поток обрабатывать сигнал с определенным номером.
+Каждый поток процесса имеет свою маску сигнала. Это, грубо говоря, индикатор, будет ли поток обрабатывать сигнал с определенным номером.
 
 Вот приходит сигнал процессу через kill. Ядро операционки смотрит на потоки программы и выбирает любой из тех, для которых маска позволяет обрабатывать данный сигнал. Так работает в общем случае.
 
 Но мы можем послать сигнал конкретному потоку в конкретном процессе. Для этого используются системные вызовы pthread_kill(работает внутри процесса) и tg_kill.
 
-Вот здесь важно: если мы можем послать сигнал потоку, это не значит, у каждого из них есть отдельный обрабочик, который мы может таргетно вызывать. Это просто значит, что мы можем выбрать поток, в котором будет выполняться код обработчика сигнала.
+Для posix систем std::raise реализован через pthread_kill, потому что в нем необходимо послать сигнал именно текущему потоку.
 
 В принципе, этой информации вам хватит, чтобы правильно использовать std::signal и std::raise и минимально понимать, что вообще там под капотом происходит.
 
@@ -405,11 +409,19 @@ int main()
 
 Дальше речь пойдет про unix-системы.
 
-Обработчик сигнала может быть вызван в любом из потоков процесса, для которого этот конктретный сигнал (например, SIGINT) не отмечен как заблокированный (blocked). Если таких потоков несколько, то ядро выбирает один из них — чаще всего, это будет основной поток программы, но это не гарантировано, и не стоит на это рассчитывать. Ядро создает на специальный фрейм на стеке, который, во-первых, нужен для непосредственно работы функции-обработчика сигнала, а во-вторых, в него сохраняются данные, необходимые для продолжения работы, такие как значения регистра счетчика команд (program counter register, адрес, с которого будет продолжено выполнение кода), специфичные для архитектуры регистры, которые необходимы для продолжения выполнения выполнявшегося кода, текущую маску сигналов потока, и т.д. После этого непосредственно в этом потоке вызывается функция-обработчик сигнала.
+Обработчик сигнала может быть вызван в любом из потоков процесса, у которого подходящая маска. Если таких потоков несколько, то ядро выбирает один из них — чаще всего, это будет основной поток программы, но это не гарантировано, и не стоит на это рассчитывать. 
 
-О чем это говорит? О том, что выполнение любого потока (который не заблокирован для обработки нашего сигнала) может быть прервано в любой момент. Абсолютно любой. Посреди выполнения любой функции, любого системного вызова. Это может происходить даже при выполнении самого обработчика. Ничто не мешает одни за другим послать 2 сигнала. В этом случае мы можем войти в обработчик, на его середине придет второй сигнал, мы прервем выполнение обработчика на середине и начнем его повторно выполнять.
+При появлении сигнала ядро выбирает подходящий поток и создает на его стеке специальный фрейм, который:
 
-А теперь представим, если прерванная функция у нас имеет какое-то статическое, глобальное или thread-local внутреннее состояние, например, буфер, какие-то флаги, мьютекс, или что-либо еще, то вызов функции еще раз, когда она еще не закончила работу, может привести к совершенно непредсказуемым результатам. В компьютерных науках про такую функцию говорят, что она non-reentrant (нереентерабельна).
+- во-первых, нужен для непосредственно работы функции-обработчика сигнала
+
+- во-вторых, в него сохраняются данные, необходимые для продолжения работы основной программы, такие как значения регистра счетчика команд (program counter register, адрес, с которого будет продолжено выполнение кода), специфичные для архитектуры регистры, которые необходимы для продолжения выполнения выполнявшегося кода, текущую маску сигналов потока, и т.д. 
+
+После создания фрейма вызывается функция-обработчик сигнала.
+
+О чем это говорит? О том, что выполнение любого потока (который не заблокирован для обработке нашего сигнала) может быть прервано в любой момент. Абсолютно любой. Посреди выполнения любой функции, любого системного вызова. Это может происходить даже при выполнении самого обработчика. Ничто не мешает одни за другим послать 2 сигнала. В этом случае мы можем войти в обработчик, на его середине придет второй сигнал, мы прервем выполнение обработчика на середине и начнем его повторно выполнять.
+
+А теперь представим, если прерванная функция у нас имеет какое-то статическое, глобальное или thread-local внутреннее состояние, например буфер, какие-то флаги, мьютекс, или что-либо еще, то вызов функции еще раз, когда она еще не закончила работу, может привести к совершенно непредсказуемым результатам. В компьютерных науках про такую функцию говорят, что она non-reentrant (нереентерабельна).
 
 В примере кода мы использовали в std::cout. Она использует внутри [статически выделенный буфер данных](https://t.me/grokaemcpp/480) вместе со счетчиками и индексами, которые хранят объем данных и текущую позицию в буфере. Обновляется все это не атомарно, и если вдруг в момент выполнения std::cout в каком-нибудь потоке мы поймаем сигнал и запустим его обработчик, который тоже вызовет std::cout, то эта функция будет работать с некорректным внутренним состоянием, что в лучшем случае приведет просто к неправильному результату, а в худшем случае уронит всю программу в segmentation fault. В общем, UB.
 
@@ -440,7 +452,7 @@ Be reliable. Stay cool.
 
 1 Они выполняются в разных тредах или 
 
-2 Одно из них выполняется внутри обработчика сигнала
+2 Одно из них выполняется внутри обработчика сигнала.
 
 А гонка данных - это состояние в программе, когда она содержит 2 потенциально конкурентных события и хотя бы одно из них не атомарно или для них не определено зависимости happens before.
 
@@ -467,7 +479,9 @@ int main()
 
 Мы неатомарно изменяем состояние флага is_running. И значит код содержит гонку данных и UB.
 
-Чуть поясню. Даже при условии того, что обработка сигнала не подразумевает создание новых потоков, переключение исполнения на обработчик очень сильно похоже на переключение контекста на новый поток. 
+Но почему обработчик сигналов конкурирует с кодом программы?
+
+Даже при условии того, что обработка сигнала не подразумевает создание новых потоков, переключение исполнения на обработчик очень сильно похоже на переключение контекста на новый поток. 
 
 Планировщик потоков в системе так и делает: когда у определенного потока заканчивается квант времени, планировщик его переключает на другой поток. Сохраняет необходимые данные для восстановления исполнения заканчивающего работу потока в контекст и загружает контекст другого потока. И делает он это в абсолютно любом месте "кода".
 
@@ -477,7 +491,7 @@ int main()
 
 Если 2 потока получают доступ к переменной, которая не является атомиком, и делают это без использования примитивов синхронизации - все понимают, что это data race и UB.
 
-Пользуясь этой же логикой, мы понимаем, что код содержит UB.
+Пользуясь этой же логикой, мы понимаем, что код с обработчиком и неатомарной переменнлй содержит UB.
 
 Поэтому, стандарт нам говорит, что внутри обработчика сигналов мы можем использовать только истинно неблокирующие функции и методы для объектов. Это такие объекты, для которых функция/метод is_lock_free() возвращает true.
 
@@ -506,6 +520,8 @@ int main()
 Don't race for nothing. Stay cool.
 
 #concurrency #cppcore #OS #memory
+
+
 
 
 Почему нельзя использовать другие примитивы синхронизации внутри signal handler?
@@ -627,7 +643,7 @@ void process_line(std::string str) {
 std::atomic<bool> is_working = true;
 
 void handler(int signal) {
-	std::cout << "Stop the loop" << std::endl;
+	// Stop the loop
 	is_working = false;
 }
 
@@ -662,11 +678,11 @@ My dear subscriber, your are the best!
 42
 My dear subscriber, your are the best!
 42
-^CStop the loop
+^C
 My dear subscriber, your are the best!
 ```
 
-Обработка сообщения занимает 2 секунды, чтобы наглядно продемонстрировать особенности завершения. После того, как я в 3-й раз написал `42` в консоль, я сразу же зажал ctrl+C, что отобразилось на консоли(`^C`). Сразу же после этого на консоль вывелось сообщение из обработчика сигналов. И после того, как последняя строчка обработается(сообщение `My dear subscriber, your are the best!` появится в выводе), цикл завершается как и соответствующий поток, деструктор дожидается завершения потока и программа сразу же завершается. 
+Обработка сообщения занимает 2 секунды, чтобы наглядно продемонстрировать особенности завершения. После того, как я в 3-й раз написал `42` в консоль, я сразу же зажал ctrl+C, что отобразилось на консоли(`^C`).  И после того, как последняя строчка обработается(сообщение `My dear subscriber, your are the best!` появится в выводе), цикл завершается как и соответствующий поток, деструктор дожидается завершения потока и программа сразу же завершается. 
 
 Прекрасно! Рабочая тема, можно использовать.
 
@@ -697,7 +713,7 @@ sigaction
 int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact);
 ```
 
-Вот она наша красавица. Первый аргумент - номер сигнала. Если параметр `act` не равен нулю, то новое действие, связянное с сигналом `signum`, устанавливается соответственно `act`. Если `oldact` не равен нулю, то предыдущее действие записывается в `oldact`.
+Первый аргумент - номер сигнала. Если параметр `act` не равен нулю, то новое действие, связянное с сигналом `signum`, устанавливается соответственно `act`. Если `oldact` не равен нулю, то предыдущее действие записывается в `oldact`.
 
 Обычно старый обработчик получать не особо нужно. И именно через act мы устанавливаем нужное поведение при получении сигнала.
 
@@ -741,11 +757,14 @@ sigaction(SIGINT, &act, nullptr);
 posix'овый signal вообще имеет unspecified поведение в многопоточной программе. Плюсовый стандарт сказал, что безопасно в любой программе внутри обработчика std::signal использовать только атомарные переменные и функции.
 sigaction же, помимо большей вариативности, по стандарту posix разрешается внутри своих обработчиков использовать так называемые async-signal-safe функции. Их список можно найти [тут](https://man7.org/linux/man-pages/man7/signal-safety.7.html). Там можно много всего делать, но нам интересно, что можно писать в сокеты.
 
-Как это может сыграть нам на руку, увидим в следующий раз.
+Как это может сыграть нам на руку, увидим в будущем.
 
 Be just better. Stay cool.
 
 #NONSTANDARD #goodoldc #concurrency 
+
+
+
 
 
 Передаем событие от обработчика
@@ -756,6 +775,344 @@ Be just better. Stay cool.
 Если мы можем записать в сокет, то кто-то может слушать этот сокет. И слушатель уже ничем не ограничен в плане используемого функционала. Если слушатель увидит приход события на сокет, то он может делать в принципе все, что угодно, и вызывать любые коллбэки. Нам это и нужно. 
 
 
+https://godbolt.org/z/fqndoqnrY
+
+
 https://youtube.com/@misha_filitov?si=G3HmZCnoJcYzDSSR
 
 Отличия signal и sigaction https://stackoverflow.com/questions/231912/what-is-the-difference-between-sigaction-and-signal
+
+
+```cpp
+#ifndef _SOURCE_H_
+#define _SOURCE_H_
+
+#include <poll.h>
+#include <signal.h>
+#include <sys/eventfd.h>
+#include <unistd.h>
+
+#include <atomic>
+#include <csignal>
+#include <iostream>
+#include <mutex>
+#include <stdexcept>
+#include <system_error>
+#include <thread>
+#include <vector>
+
+class SignalHandler {
+public:
+    // Singleton access
+    static SignalHandler& Instance() {
+        static SignalHandler instance;
+        return instance;
+    }
+
+    // Delete copy and move
+    SignalHandler(const SignalHandler&) = delete;
+    SignalHandler& operator=(const SignalHandler&) = delete;
+    SignalHandler(SignalHandler&&) = delete;
+    SignalHandler& operator=(SignalHandler&&) = delete;
+
+    // Set the signal handler (can be called once, or after Reset())
+    template <typename CallbackT, typename... Args>
+    void SetHandler(const std::vector<int>& signals, CallbackT&& callback, Args&&... args) {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        if (running_) {
+            throw std::runtime_error("SignalHandler is already running. Call Reset() first.");
+        }
+
+        if ((terminate_event_fd_ = eventfd(0, EFD_CLOEXEC)) < 0)
+            throw std::system_error(errno, std::system_category(),
+                                    "unable to create terminate event FD");
+        if ((trigger_event_fd_ = eventfd(0, EFD_CLOEXEC | EFD_SEMAPHORE)) < 0) {
+            close(terminate_event_fd_);
+            throw std::system_error(errno, std::system_category(),
+                                    "unable to create trigger event FD");
+        }
+
+        signals_ = signals;
+
+        thread_ =
+            std::thread([this, callback = std::forward<CallbackT>(callback),
+                         args_tuple = std::make_tuple(std::forward<Args>(args)...)]() mutable {
+                this->TriggerHandlerImpl(std::move(callback), std::move(args_tuple));
+            });
+
+        InstallSignals();
+        running_ = true;
+    }
+
+    // Safely stop and reset the handler
+    void Reset() {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        if (!running_)
+            return;
+
+        UninstallSignals();
+        eventfd_write(terminate_event_fd_, 1); // Signal thread to stop
+
+        if (thread_.joinable()) {
+            thread_.join();
+        }
+
+        close(terminate_event_fd_);
+        close(trigger_event_fd_);
+
+        terminate_event_fd_ = -1;
+        trigger_event_fd_ = -1;
+        running_ = false;
+        thread_ready_.store(false, std::memory_order_release);
+    }
+
+    // Public method to trigger from signal (signal-safe)
+    void Trigger() {
+        eventfd_write(trigger_event_fd_, 1);
+    }
+
+private:
+    SignalHandler() = default;
+
+    ~SignalHandler() {
+        if (running_) {
+            Reset();
+        }
+    }
+
+    void InstallSignals() {
+        struct sigaction act;
+        act.sa_sigaction = TriggerEmitter;
+        sigemptyset(&act.sa_mask);
+        act.sa_flags = SA_SIGINFO | SA_RESTART;
+        for (int sig : signals_) {
+            if (sigaction(sig, &act, nullptr) == -1) {
+                throw std::system_error(errno, std::system_category(), "sigaction install failed");
+            }
+        }
+    }
+
+    void UninstallSignals() {
+        struct sigaction act;
+        act.sa_handler = SIG_DFL;
+        sigemptyset(&act.sa_mask);
+        act.sa_flags = 0;
+        for (int sig : signals_) {
+            sigaction(sig, &act, nullptr); // Ignore errors
+        }
+    }
+
+    static void TriggerEmitter(int signum, siginfo_t* info, void* context) {
+        SignalHandler::Instance().Trigger();
+    }
+
+    template <typename CallbackT, typename ArgsTuple, size_t... I>
+    void TriggerHandlerImpl(CallbackT&& callback, ArgsTuple&& args, std::index_sequence<I...>) {
+        uint64_t val;
+        struct pollfd pfds[2] = {{.fd = terminate_event_fd_, .events = POLLIN, .revents = 0},
+                                 {.fd = trigger_event_fd_, .events = POLLIN, .revents = 0}};
+
+        thread_ready_.store(true, std::memory_order_release);
+
+        while (true) {
+            int ret = poll(pfds, 2, -1);
+            if (ret < 0) {
+                if (errno == EINTR) {
+                    continue;
+                }
+                std::cout << "Failed on poll" << std::endl;
+                break;
+            }
+
+            // Check termination event
+            if (pfds[0].revents & POLLIN) {
+                auto count = read(terminate_event_fd_, &val, sizeof(val)); // Consume event
+                if (count < 0) {
+                    std::cout << "Failed on read termination event" << std::endl;
+                }
+                break;
+            }
+
+            // Check trigger event
+            if (pfds[1].revents & POLLIN) {
+                auto count = read(trigger_event_fd_, &val, sizeof(val)); // Consume event
+                if (count < 0) {
+                    std::cout << "Failed on read trigger event" << std::endl;
+                    break;
+                }
+                std::forward<CallbackT>(callback)(std::get<I>(std::forward<ArgsTuple>(args))...);
+            }
+        }
+    }
+
+    template <typename CallbackT, typename ArgsTuple>
+    void TriggerHandlerImpl(CallbackT&& callback, ArgsTuple&& args) {
+        using Indices = std::make_index_sequence<std::tuple_size_v<std::decay_t<ArgsTuple>>>;
+        TriggerHandlerImpl(std::forward<CallbackT>(callback), std::forward<ArgsTuple>(args),
+                           Indices{});
+    }
+
+private:
+    std::vector<int> signals_;
+
+    int terminate_event_fd_ = -1;
+    int trigger_event_fd_ = -1;
+
+    std::thread thread_;
+    std::mutex mutex_;
+    std::atomic<bool> thread_ready_{false};
+    std::atomic<bool> running_{false};
+};
+
+template <typename CallbackT, typename... Args>
+void SetSignalHandler(const std::vector<int>& signals, CallbackT&& callback, Args&&... args) {
+    SignalHandler::Instance().SetHandler(signals, std::forward<CallbackT>(callback),
+                                         std::forward<Args>(args)...);
+}
+
+inline void ResetSignalHandler() {
+    SignalHandler::Instance().Reset();
+}
+
+#endif //_SOURCE_H_
+
+
+#include <gmock/gmock.h>
+#include "source.h"
+
+
+#include <gtest/gtest.h>
+#include <signal.h>
+
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+#include <vector>
+
+class SignalHandlerTest: public ::testing::Test {
+public:
+    static void SignalCallback(SignalHandlerTest* app) {
+        // SignalHandlerTest* test_ptr = reinterpret_cast<SignalHandlerTest*>(app);
+        std::unique_lock<std::mutex> lock(app->signal_handler_test_mtx_);
+        ++app->callback_counter_;
+        app->cv_.notify_one();
+    };
+
+    static void ThreeParamsCallback(SignalHandlerTest* app, int a, std::string& b) {
+        std::unique_lock<std::mutex> lock(app->signal_handler_test_mtx_);
+        app->callback_counter_++;
+        EXPECT_EQ(a, 42);
+        EXPECT_EQ(b, "hello");
+        app->cv_.notify_one();
+    }
+
+protected:
+    std::mutex signal_handler_test_mtx_;
+    std::condition_variable cv_;
+    int callback_counter_;
+    std::vector<int> valid_signals_;
+    std::vector<int> non_triger_signals_;
+
+    static void NonTrigerSignalHandler(int signal) {};
+
+    static void MultipleTrigerSignalHandler(int signal) {};
+
+    void SetUp() override {
+        callback_counter_ = 0;
+        valid_signals_ = {SIGINT, SIGTERM};
+        non_triger_signals_ = {SIGTSTP};
+        for (const auto& non_triger_signal : non_triger_signals_) {
+            std::signal(non_triger_signal, NonTrigerSignalHandler);
+        }
+    };
+};
+
+TEST_F(SignalHandlerTest, SingleSignalHandling) {
+    SetSignalHandler(valid_signals_, SignalCallback, this);
+    std::raise(valid_signals_[0]);
+    std::unique_lock<std::mutex> lock(signal_handler_test_mtx_);
+    cv_.wait(lock, [&] { return callback_counter_; });
+    EXPECT_TRUE(callback_counter_);
+    ResetSignalHandler();
+}
+
+TEST_F(SignalHandlerTest, DifferentCallbacks) {
+    {
+        SetSignalHandler(valid_signals_, [this] { SignalCallback(this); });
+        std::raise(valid_signals_[0]);
+        std::unique_lock<std::mutex> lock(signal_handler_test_mtx_);
+        cv_.wait(lock, [&] { return callback_counter_; });
+        EXPECT_TRUE(callback_counter_);
+        ResetSignalHandler();
+        callback_counter_ = 0;
+    }
+    {
+        std::string str = "hello";
+        SetSignalHandler(valid_signals_, ThreeParamsCallback, this, 42, std::ref(str));
+        std::raise(valid_signals_[0]);
+        std::unique_lock<std::mutex> lock(signal_handler_test_mtx_);
+        cv_.wait(lock, [&] { return callback_counter_; });
+        EXPECT_TRUE(callback_counter_);
+        ResetSignalHandler();
+    }
+}
+
+TEST_F(SignalHandlerTest, MultipleSignalHandling) {
+    int signal_counter = 0;
+    for (const auto& signal : valid_signals_) {
+        ++signal_counter;
+        SetSignalHandler(valid_signals_, SignalCallback, this);
+        std::raise(signal);
+        std::unique_lock<std::mutex> lock(signal_handler_test_mtx_);
+        cv_.wait(lock, [&] { return callback_counter_ == signal_counter; });
+        EXPECT_EQ(callback_counter_, signal_counter);
+        ResetSignalHandler();
+    }
+}
+
+TEST_F(SignalHandlerTest, OneSignalMultipleHandling) {
+    int signal_counter = 0;
+    for (size_t i = 0; i < 10; ++i) {
+        ++signal_counter;
+        SetSignalHandler(valid_signals_, SignalCallback, this);
+        std::raise(valid_signals_[0]);
+        std::unique_lock<std::mutex> lock(signal_handler_test_mtx_);
+        cv_.wait(lock, [&] { return callback_counter_ == signal_counter; });
+        EXPECT_EQ(callback_counter_, signal_counter);
+        ResetSignalHandler();
+    }
+}
+
+TEST_F(SignalHandlerTest, OneHandlerMultpleTriggering) {
+    SetSignalHandler(valid_signals_, SignalCallback, this);
+    std::raise(valid_signals_[0]);
+    std::raise(valid_signals_[0]);
+    std::raise(valid_signals_[0]);
+    std::unique_lock<std::mutex> lock(signal_handler_test_mtx_);
+    cv_.wait(lock, [&] { return callback_counter_ == 3; });
+    EXPECT_EQ(callback_counter_, 3);
+    ResetSignalHandler();
+}
+
+TEST_F(SignalHandlerTest, NonTrigerSignalHandling) {
+    for (const auto& signal : non_triger_signals_) {
+        SetSignalHandler(valid_signals_, SignalCallback, this);
+        std::raise(signal);
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        EXPECT_EQ(callback_counter_, 0);
+        ResetSignalHandler();
+    }
+}
+
+TEST_F(SignalHandlerTest, MultipleInstance) {
+    SetSignalHandler(valid_signals_, SignalCallback, this);
+    {
+        EXPECT_THROW(SetSignalHandler(valid_signals_, SignalCallback, this), std::runtime_error);
+    }
+}
+
+
+```
